@@ -1,0 +1,18 @@
+{
+  "type": "new-message",
+  "data": {
+    "guid": "invented-message-guid-001",
+    "text": "Invented fixture text that must never appear in logs",
+    "isFromMe": false,
+    "dateCreated": 1712345678000,
+    "handle": {"address": "fixture@example.invalid"},
+    "attachments": [
+      {"guid": "invented-attachment-guid", "transferName": "private-fixture-name.txt"}
+    ],
+    "chats": [
+      {"guid": "invented-chat-guid-001", "displayName": "Invented private chat"}
+    ],
+    "futureUnknownField": "unknown-value-must-not-be-logged"
+  }
+}
+

@@ -1,0 +1,2 @@
+"""BlueBubbles webhook ingress."""
+
