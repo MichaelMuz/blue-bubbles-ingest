@@ -7,6 +7,9 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 MAX_BODY_BYTES = 1024 * 1024
+MAX_SHAPE_DEPTH = 12
+MAX_SHAPE_KEYS = 100
+MAX_ARRAY_SHAPES = 20
 logger = logging.getLogger("blue_bubbles_ingest.events")
 logger.setLevel(logging.INFO)
 logger.propagate = False
@@ -26,6 +29,75 @@ def _hash_prefix(value: Any) -> str | None:
     if not isinstance(value, str) or not value:
         return None
     return hashlib.sha256(value.encode()).hexdigest()[:12]
+
+
+def _shape(value: Any, depth: int = 0) -> dict[str, Any]:
+    """Describe JSON structure without retaining primitive values."""
+    if value is None:
+        return {"type": "null"}
+    if isinstance(value, bool):
+        return {"type": "boolean"}
+    if isinstance(value, int):
+        return {"type": "integer"}
+    if isinstance(value, float):
+        return {"type": "float"}
+    if isinstance(value, str):
+        return {"type": "string"}
+    if isinstance(value, dict):
+        if depth >= MAX_SHAPE_DEPTH:
+            return {"type": "object", "truncated": "maxDepth"}
+
+        string_keys = sorted(key for key in value if isinstance(key, str))
+        visible_keys = string_keys[:MAX_SHAPE_KEYS]
+        shape: dict[str, Any] = {
+            "type": "object",
+            "keys": {key: _shape(value[key], depth + 1) for key in visible_keys},
+        }
+        omitted = len(value) - len(visible_keys)
+        if omitted:
+            shape["truncated"] = {"reason": "maxKeys", "omittedCount": omitted}
+        return shape
+    if isinstance(value, (list, tuple)):
+        if depth >= MAX_SHAPE_DEPTH:
+            return {
+                "type": "array",
+                "count": len(value),
+                "truncated": "maxDepth",
+            }
+
+        unique: dict[str, dict[str, Any]] = {}
+        truncated = False
+        for item in value:
+            item_shape = _shape(item, depth + 1)
+            canonical = json.dumps(item_shape, sort_keys=True, separators=(",", ":"))
+            if canonical in unique:
+                continue
+            if len(unique) < MAX_ARRAY_SHAPES:
+                unique[canonical] = item_shape
+            else:
+                truncated = True
+                largest = max(unique)
+                if canonical < largest:
+                    del unique[largest]
+                    unique[canonical] = item_shape
+        shape = {
+            "type": "array",
+            "count": len(value),
+            "itemShapes": [unique[key] for key in sorted(unique)],
+        }
+        if truncated:
+            shape["truncated"] = "maxUniqueItemShapes"
+        return shape
+    return {"type": "unknown"}
+
+
+def _shape_log_fields(data: Any) -> dict[str, Any]:
+    shape = _shape(data)
+    canonical = json.dumps(shape, sort_keys=True, separators=(",", ":"))
+    return {
+        "dataShape": shape,
+        "dataShapeHash": hashlib.sha256(canonical.encode()).hexdigest(),
+    }
 
 
 def _safe_summary(event_type: str, data: Any) -> dict[str, Any]:
@@ -109,5 +181,7 @@ async def receive_webhook(request: Request) -> Response:
     if "data" not in envelope:
         return _error(422, "data field is required")
 
-    logger.info(json.dumps(_safe_summary(event_type, envelope["data"]), separators=(",", ":")))
+    log_entry = _safe_summary(event_type, envelope["data"])
+    log_entry.update(_shape_log_fields(envelope["data"]))
+    logger.info(json.dumps(log_entry, sort_keys=True, separators=(",", ":")))
     return Response(status_code=204)
