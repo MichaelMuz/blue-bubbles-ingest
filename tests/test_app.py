@@ -23,6 +23,15 @@ def test_healthz() -> None:
     assert response.json() == {"status": "healthy"}
 
 
+def test_readyz_is_distinct_from_healthz() -> None:
+    readiness = client.get("/readyz")
+    liveness = client.get("/healthz")
+
+    assert readiness.status_code == 200
+    assert readiness.json() == {"status": "ready"}
+    assert readiness.json() != liveness.json()
+
+
 def test_valid_new_message_is_accepted() -> None:
     response = client.post(
         "/v1/webhooks/bluebubbles",

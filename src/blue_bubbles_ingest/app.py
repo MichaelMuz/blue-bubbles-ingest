@@ -151,6 +151,11 @@ async def healthz() -> dict[str, str]:
     return {"status": "healthy"}
 
 
+@app.get("/readyz")
+async def readyz() -> dict[str, str]:
+    return {"status": "ready"}
+
+
 @app.post("/v1/webhooks/bluebubbles")
 async def receive_webhook(request: Request) -> Response:
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()

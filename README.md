@@ -5,6 +5,7 @@ A small HTTP receiver for proving BlueBubbles Server to Kubernetes delivery whil
 ## Endpoints
 
 - `GET /healthz` returns `{"status":"healthy"}`.
+- `GET /readyz` returns `{"status":"ready"}` as the readiness contract.
 - `POST /v1/webhooks/bluebubbles` accepts BlueBubbles JSON envelopes up to 1 MiB and returns `204` after validation and safe logging.
 
 Configure BlueBubbles Server 1.9.9 with the private HTTPRoute URL ending in `/v1/webhooks/bluebubbles`. Keep this single generic endpoint configured while exercising direct messages, group chats, attachments, reactions, and other event variants, then compare the shape hashes and inspect pod logs to learn their schemas. BlueBubbles cannot add a custom authentication header to webhook requests, so the endpoint is intended to remain private.
